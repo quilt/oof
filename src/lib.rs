@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 type K = u128;
 type V = u128;
 
-pub struct Proof<'a> {
+pub struct Oof<'a> {
     pub keys: &'a [K],
     pub values: &'a mut [V],
     pub height: u32,
@@ -19,9 +19,9 @@ pub enum Error {
     EntryNotFound(K),
 }
 
-impl<'a> Proof<'a> {
+impl<'a> Oof<'a> {
     pub fn new(keys: &'a [K], values: &'a mut [V], height: u32) -> Self {
-        Proof {
+        Oof {
             keys,
             values,
             height,
@@ -92,37 +92,37 @@ mod tests {
 
     #[test]
     fn get() {
-        let proof = Proof {
+        let oof = Oof {
             keys: &[1, 2, 3],
             values: &mut [1, 2, 3],
             height: 1,
             is_dirty: false,
         };
 
-        assert_eq!(proof.get(&1), Some(&1));
-        assert_eq!(proof.get(&2), Some(&2));
-        assert_eq!(proof.get(&3), Some(&3));
-        assert_eq!(proof.get(&4), None);
+        assert_eq!(oof.get(&1), Some(&1));
+        assert_eq!(oof.get(&2), Some(&2));
+        assert_eq!(oof.get(&3), Some(&3));
+        assert_eq!(oof.get(&4), None);
     }
 
     #[test]
     fn set() {
-        let mut proof = Proof {
+        let mut oof = Oof {
             keys: &[1, 2, 3],
             values: &mut [1, 2, 3],
             height: 1,
             is_dirty: false,
         };
 
-        assert_eq!(proof.set(1, 2), Ok(1));
-        assert_eq!(proof.set(2, 3), Ok(2));
-        assert_eq!(proof.set(3, 4), Ok(3));
-        assert_eq!(proof.set(4, 5), Err(Error::EntryNotFound(4)));
+        assert_eq!(oof.set(1, 2), Ok(1));
+        assert_eq!(oof.set(2, 3), Ok(2));
+        assert_eq!(oof.set(3, 4), Ok(3));
+        assert_eq!(oof.set(4, 5), Err(Error::EntryNotFound(4)));
     }
 
     #[test]
     fn root() {
-        let mut proof = Proof {
+        let mut oof = Oof {
             keys: &[1, 2, 3],
             values: &mut [1, 2, 3],
             height: 2,
@@ -130,9 +130,9 @@ mod tests {
         };
 
         let mut buf = [0u8; 32];
-        hash_children(&mut buf, &proof.values[1], &proof.values[2]);
+        hash_children(&mut buf, &oof.values[1], &oof.values[2]);
         let root = u128::from_le_bytes(*array_ref![buf, 0, 16]);
 
-        assert_eq!(proof.root(), Ok(&root));
+        assert_eq!(oof.root(), Ok(&root));
     }
 }

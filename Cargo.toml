@@ -1,7 +1,11 @@
 [package]
-name = "simple-proof"
-version = "0.1.0"
-authors = ["Matt Garnett <matt.garnett@me.com>"]
+name = "oof"
+version = "0.0.0"
+authors = ["Matt Garnett <crates@garnett.dev>"]
+license = "Apache-2.0"
+description = "Naive proof scheme for accelerated testing"
+repository = "https://github.com/quilt/oof"
+keywords = ["eth2", "proof"]
 edition = "2018"
 
 [dependencies]

@@ -1,5 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 
+use core::mem::size_of;
+use core::slice::{from_raw_parts, from_raw_parts_mut};
+
 use arrayref::array_ref;
 use bonsai::expand;
 use sha2::{Digest, Sha256};
@@ -21,6 +24,24 @@ pub enum Error {
 
 impl<'a> Oof<'a> {
     pub fn new(keys: &'a [K], values: &'a mut [V], height: u32) -> Self {
+        Oof {
+            keys,
+            values,
+            height,
+            is_dirty: false,
+        }
+    }
+
+    pub unsafe fn from_blob(data: *mut u8, height: u32) -> Oof<'a> {
+        let count = from_raw_parts(data, 4);
+        let count = u32::from_le_bytes(*array_ref![count, 0, 4]) as usize;
+
+        let keys_ptr = data.offset(4) as *const u128;
+        let keys = from_raw_parts(keys_ptr, count);
+
+        let values_ptr = data.offset(4 + (count * size_of::<K>()) as isize) as *mut u128;
+        let values = from_raw_parts_mut(values_ptr, count);
+
         Oof {
             keys,
             values,
@@ -89,6 +110,7 @@ fn hash_children(buf: &mut [u8; 32], left: &V, right: &V) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::mem::transmute;
 
     #[test]
     fn get() {
@@ -134,5 +156,28 @@ mod tests {
         let root = u128::from_le_bytes(*array_ref![buf, 0, 16]);
 
         assert_eq!(oof.root(), Ok(&root));
+    }
+
+    #[test]
+    fn from_blob() {
+        let count: u32 = 3;
+
+        let keys: [u128; 3] = [1, 2, 3];
+        let values: [u128; 3] = [1, 2, 3];
+
+        let keys: [u8; 48] = unsafe { transmute(keys) };
+        let values: [u8; 48] = unsafe { transmute(values) };
+
+        let mut blob = [0u8; (4 + 48 + 48)];
+        blob[0..4].copy_from_slice(&count.to_le_bytes());
+        blob[4..52].copy_from_slice(&keys[..]);
+        blob[52..100].copy_from_slice(&values[..]);
+
+        let oof = unsafe { Oof::from_blob(blob[..].as_ptr() as *mut u8, 2) };
+
+        assert_eq!(oof.get(&1), Some(&1));
+        assert_eq!(oof.get(&2), Some(&2));
+        assert_eq!(oof.get(&3), Some(&3));
+        assert_eq!(oof.get(&4), None);
     }
 }

@@ -32,22 +32,16 @@ impl<'a> Oof<'a> {
         }
     }
 
-    pub unsafe fn from_blob(data: *mut u8, height: u32) -> Oof<'a> {
-        let count = from_raw_parts(data, 4);
-        let count = u32::from_le_bytes(*array_ref![count, 0, 4]) as usize;
+    pub unsafe fn from_blob(data: *mut u8, height: u32) -> Self {
+        let count = u32::from_le_bytes(*array_ref![from_raw_parts(data, 4), 0, 4]) as usize;
+        let keys = data.offset(4) as *const u128;
+        let values = data.offset(4 + (count * size_of::<K>()) as isize) as *mut u128;
 
-        let keys_ptr = data.offset(4) as *const u128;
-        let keys = from_raw_parts(keys_ptr, count);
-
-        let values_ptr = data.offset(4 + (count * size_of::<K>()) as isize) as *mut u128;
-        let values = from_raw_parts_mut(values_ptr, count);
-
-        Oof {
-            keys,
-            values,
+        Self::new(
+            from_raw_parts(keys, count),
+            from_raw_parts_mut(values, count),
             height,
-            is_dirty: false,
-        }
+        )
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {

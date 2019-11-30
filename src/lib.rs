@@ -1,10 +1,11 @@
 #![cfg_attr(not(test), no_std)]
 
+use core::cmp::min;
 use core::mem::size_of;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use arrayref::array_ref;
-use bonsai::expand;
+use bonsai::{expand, subtree_index_to_general};
 use sha2::{Digest, Sha256};
 
 type K = u128;
@@ -61,6 +62,24 @@ impl<'a> Oof<'a> {
             }
             Err(_) => Err(Error::EntryNotFound(key)),
         }
+    }
+
+    pub fn insert_bytes(&mut self, rooted: K, bytes: &[u8]) -> Result<(), Error> {
+        let len = (bytes.len() as u128)
+            .checked_next_power_of_two()
+            .ok_or(Error::EntryNotFound(1))?;
+
+        let last = subtree_index_to_general(rooted, len);
+        let first = last - len;
+
+        let i = 0;
+        while i < bytes.len() {
+            let mut buf = [0u8; 32];
+            buf.copy_from_slice(&bytes[i * 32..min((i + 1) * 32, bytes.len())]);
+            self.set(first + i as u128, buf)?;
+        }
+
+        Ok(())
     }
 
     pub fn root(&mut self) -> Result<&V, Error> {
@@ -140,6 +159,15 @@ mod tests {
         assert_eq!(oof.set(2, build_value(3)), Ok(build_value(2)));
         assert_eq!(oof.set(3, build_value(4)), Ok(build_value(3)));
         assert_eq!(oof.set(4, build_value(5)), Err(Error::EntryNotFound(4)));
+    }
+
+    fn insert_bytes() {
+        let mut oof = Oof {
+            keys: &[1, 2, 3],
+            values: &mut [build_value(1), build_value(2), build_value(3)],
+            height: 1,
+            is_dirty: false,
+        };
     }
 
     #[test]

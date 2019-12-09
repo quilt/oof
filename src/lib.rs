@@ -4,14 +4,14 @@ use core::mem::size_of;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use arrayref::array_ref;
-use bonsai::expand;
+use bonsai::{expand, subtree_index_to_general};
 use sha2::{Digest, Sha256};
 
 type K = u128;
 type V = [u8; 32];
 
 pub struct Oof<'a> {
-    pub keys: &'a [K],
+    pub keys: &'a mut [K],
     pub values: &'a mut [V],
     pub height: u32,
     is_dirty: bool,
@@ -23,7 +23,7 @@ pub enum Error {
 }
 
 impl<'a> Oof<'a> {
-    pub fn new(keys: &'a [K], values: &'a mut [V], height: u32) -> Self {
+    pub fn new(keys: &'a mut [K], values: &'a mut [V], height: u32) -> Self {
         Oof {
             keys,
             values,
@@ -34,11 +34,11 @@ impl<'a> Oof<'a> {
 
     pub unsafe fn from_blob(data: *mut u8, height: u32) -> Self {
         let count = u32::from_le_bytes(*array_ref![from_raw_parts(data, 4), 0, 4]) as usize;
-        let keys = data.offset(4) as *const K;
+        let keys = data.offset(4) as *mut K;
         let values = data.offset(4 + (count * size_of::<K>()) as isize) as *mut V;
 
         Self::new(
-            from_raw_parts(keys, count),
+            from_raw_parts_mut(keys, count),
             from_raw_parts_mut(values, count),
             height,
         )
@@ -92,6 +92,12 @@ impl<'a> Oof<'a> {
 
         Ok(())
     }
+
+    pub fn to_subtree(&mut self, root: K) {
+        for i in 0..self.keys.len() {
+            self.keys[i] = subtree_index_to_general(root, self.keys[i]);
+        }
+    }
 }
 
 fn hash_children(buf: &mut [u8; 64], left: &V, right: &V) {
@@ -115,7 +121,7 @@ mod tests {
     #[test]
     fn get() {
         let oof = Oof {
-            keys: &[1, 2, 3],
+            keys: &mut [1, 2, 3],
             values: &mut [build_value(1), build_value(2), build_value(3)],
             height: 1,
             is_dirty: false,
@@ -130,7 +136,7 @@ mod tests {
     #[test]
     fn set() {
         let mut oof = Oof {
-            keys: &[1, 2, 3],
+            keys: &mut [1, 2, 3],
             values: &mut [build_value(1), build_value(2), build_value(3)],
             height: 1,
             is_dirty: false,
@@ -145,7 +151,7 @@ mod tests {
     #[test]
     fn root() {
         let mut oof = Oof {
-            keys: &[1, 2, 3],
+            keys: &mut [1, 2, 3],
             values: &mut [build_value(1), build_value(2), build_value(3)],
             height: 2,
             is_dirty: true,
@@ -155,6 +161,27 @@ mod tests {
         hash_children(&mut buf, &oof.values[1], &oof.values[2]);
 
         assert_eq!(oof.root(), Ok(array_ref![buf, 0, 32]));
+    }
+
+    #[test]
+    fn to_subtree() {
+        let mut oof = Oof {
+            keys: &mut [1, 2, 3],
+            values: &mut [build_value(1), build_value(2), build_value(3)],
+            height: 1,
+            is_dirty: false,
+        };
+
+        oof.to_subtree(5);
+
+        assert_eq!(oof.get(&5), Some(&build_value(1)));
+        assert_eq!(oof.get(&10), Some(&build_value(2)));
+        assert_eq!(oof.get(&11), Some(&build_value(3)));
+
+        assert_eq!(oof.get(&1), None);
+        assert_eq!(oof.get(&2), None);
+        assert_eq!(oof.get(&3), None);
+        assert_eq!(oof.get(&12), None);
     }
 
     #[test]

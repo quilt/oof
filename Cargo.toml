@@ -1,6 +1,6 @@
 [package]
 name = "oof"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Matt Garnett <crates@garnett.dev>"]
 license = "Apache-2.0"
 description = "Naive proof scheme for accelerated testing"

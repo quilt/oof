@@ -10,5 +10,9 @@ edition = "2018"
 
 [dependencies]
 arrayref = "0.3.5"
-bonsai = { version = "0.2.0", default-features = false, features=["u128"] }
+bonsai = { path = "../bonsai", default-features = false, features=["u128"] }
 sha2 = "0.8.0"
+
+[features]
+default = []
+generate = []

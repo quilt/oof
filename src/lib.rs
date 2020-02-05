@@ -1,31 +1,27 @@
-#![no_std]
+// #![no_std]
 
-mod hash;
+pub mod hash;
 
 extern crate alloc;
 
 use crate::hash::hash;
 
-#[cfg(feature = "generate")]
-use crate::hash::zero_hash;
-
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use arrayref::array_ref;
 use bonsai::expand;
 use core::mem::size_of;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
-#[cfg(feature = "generate")]
-use bonsai::{children, relative_depth, subtree_index_to_general};
+#[cfg(any(test, feature = "generate"))]
+use alloc::vec::Vec;
 
 type K = u128;
 type V = [u8; 32];
 type Map = BTreeMap<K, V>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Oof {
     pub map: Map,
-    pub height: u32,
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,17 +30,17 @@ pub enum Error {
 }
 
 impl Oof {
-    pub fn new(keys: &[K], values: &[V], height: u32) -> Self {
+    pub fn new(keys: &[K], values: &[V]) -> Self {
         let mut map = Map::new();
 
         for i in 0..keys.len() {
             map.insert(keys[i], values[i]);
         }
 
-        Self { map, height }
+        Self { map }
     }
 
-    pub unsafe fn from_blob(data: *mut u8, height: u32) -> Self {
+    pub unsafe fn from_raw(data: *mut u8) -> Self {
         let count = u32::from_le_bytes(*array_ref![from_raw_parts(data, 4), 0, 4]) as usize;
         let keys = data.offset(4) as *mut K;
         let values = data.offset(4 + (count * size_of::<K>()) as isize) as *mut V;
@@ -52,8 +48,32 @@ impl Oof {
         Self::new(
             from_raw_parts_mut(keys, count),
             from_raw_parts_mut(values, count),
-            height,
         )
+    }
+
+    pub fn from_map(map: Map) -> Self {
+        Self { map }
+    }
+
+    #[cfg(any(test, feature = "generate"))]
+    pub fn to_map(self) -> Map {
+        self.map
+    }
+
+    #[cfg(any(test, feature = "generate"))]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let keys: Vec<u8> = self
+            .map
+            .keys()
+            .flat_map(|k| k.to_le_bytes().to_vec())
+            .collect();
+
+        let values: Vec<u8> = self.map.values().flatten().cloned().collect();
+
+        let mut ret = (self.map.keys().len() as u32).to_le_bytes().to_vec();
+        ret.extend(keys);
+        ret.extend(values);
+        ret
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
@@ -69,96 +89,35 @@ impl Oof {
         Ok(self.get(&1).ok_or(Error::EntryNotFound(1))?)
     }
 
-    fn keys(&self) -> Vec<K> {
-        let mut keys: Vec<u128> = self.map.keys().cloned().collect();
-        keys.sort_by(|a, b| b.cmp(a));
-        keys
+    pub fn keys(&self) -> BTreeSet<K> {
+        self.map.keys().cloned().collect()
     }
 
     fn refresh(&mut self) -> Result<(), Error> {
-        let mut nodes: Vec<u128> = self.keys();
-        let mut position = 0;
+        let mut keys: BinaryHeap<u128> = self.keys().into_iter().collect();
 
-        while nodes[position] > 1 {
-            let (left, right, parent) = expand(nodes[position]);
+        while let Some(key) = keys.pop() {
+            if key <= 1 {
+                break;
+            }
+
+            let (left, right, parent) = expand(key);
+
+            println!("l: {} r: {} p: {}", left, right, parent);
 
             match (self.get(&left), self.get(&right), self.get(&parent)) {
                 (Some(l), Some(r), None) => {
                     let h = hash(l, r);
                     self.set(parent, h);
-                    nodes.push(parent);
+                    keys.push(parent);
                 }
                 (Some(_), Some(_), Some(_)) => (),
                 (None, _, _) => return Err(Error::EntryNotFound(left)),
                 (_, None, _) => return Err(Error::EntryNotFound(right)),
             };
-
-            position += 1;
         }
 
         Ok(())
-    }
-
-    #[cfg(feature = "generate")]
-    pub fn to_map(self) -> Map {
-        self.map
-    }
-
-    #[cfg(feature = "generate")]
-    pub fn from_map(map: Map, height: u32) -> Self {
-        Self { map, height }
-    }
-
-    #[cfg(feature = "generate")]
-    pub fn fill_with_default(&mut self, default: &V) {
-        let mut nodes: Vec<u128> = self.keys();
-        nodes.sort_by(|a, b| b.cmp(a));
-
-        let mut position = 0;
-        while nodes[position] > 1 {
-            let (left, right, parent) = expand(nodes[position]);
-
-            if !self.map.contains_key(&parent) {
-                let left = self
-                    .map
-                    .entry(left)
-                    .or_insert(zero_hash(default, relative_depth(left, 1 << self.height)))
-                    .clone();
-
-                let right = self
-                    .map
-                    .entry(right)
-                    .or_insert(zero_hash(default, relative_depth(right, 1 << self.height)));
-
-                let h = hash(&left, &right);
-                self.set(parent, h);
-                nodes.push(parent);
-            }
-
-            position += 1;
-        }
-    }
-
-    #[cfg(feature = "generate")]
-    pub fn into_branch(mut self) -> Self {
-        for key in self.keys() {
-            let (left, right) = children(key);
-
-            if self.map.contains_key(&left) || self.map.contains_key(&right) {
-                self.map.remove(&key);
-            }
-        }
-
-        self
-    }
-
-    #[cfg(feature = "generate")]
-    pub fn to_subtree(&mut self, root: K) {
-        let keys = self.keys();
-        for i in 0..keys.len() {
-            let value = self.map.remove(&keys[i]).unwrap();
-            self.set(subtree_index_to_general(root, keys[i]), value);
-        }
     }
 }
 
@@ -177,56 +136,12 @@ mod tests {
     fn root() {
         let mut keys = [2, 6, 7];
         let mut values = [build_value(2), build_value(6), build_value(7)];
-        let mut oof = Oof::new(&mut keys, &mut values, 1);
+        let mut oof = Oof::new(&mut keys, &mut values);
 
         let three = hash(&values[1], &values[2]);
         let one = hash(&values[0], &three);
 
         assert_eq!(oof.root(), Ok(&one));
-    }
-
-    #[cfg(feature = "generate")]
-    #[test]
-    fn fill_and_minimize() {
-        let mut map = Map::new();
-        map.insert(14, build_value(14));
-        map.insert(15, build_value(15));
-
-        let mut oof = Oof::from_map(map.clone(), 3);
-        oof.fill_with_default(&[0u8; 32]);
-
-        map.insert(7, hash(map.get(&14).unwrap(), map.get(&15).unwrap()));
-        map.insert(6, zero_hash(&[0u8; 32], 1));
-        map.insert(2, zero_hash(&[0u8; 32], 2));
-        map.insert(3, hash(map.get(&6).unwrap(), map.get(&7).unwrap()));
-        map.insert(1, hash(map.get(&2).unwrap(), map.get(&3).unwrap()));
-
-        assert_eq!(oof.clone().to_map(), map);
-
-        map.remove(&1);
-        map.remove(&3);
-        map.remove(&7);
-
-        assert_eq!(oof.into_branch().to_map(), map);
-    }
-
-    #[cfg(feature = "generate")]
-    #[test]
-    fn to_subtree() {
-        let mut keys = [1, 2, 3];
-        let mut values = [build_value(1), build_value(2), build_value(3)];
-        let mut oof = Oof::new(&mut keys, &mut values, 1);
-
-        oof.to_subtree(5);
-
-        assert_eq!(oof.get(&5), Some(&build_value(1)));
-        assert_eq!(oof.get(&10), Some(&build_value(2)));
-        assert_eq!(oof.get(&11), Some(&build_value(3)));
-
-        assert_eq!(oof.get(&1), None);
-        assert_eq!(oof.get(&2), None);
-        assert_eq!(oof.get(&3), None);
-        assert_eq!(oof.get(&12), None);
     }
 
     #[test]
@@ -244,7 +159,7 @@ mod tests {
         blob[4..52].copy_from_slice(&keys[..]);
         blob[52..148].copy_from_slice(&values[..]);
 
-        let oof = unsafe { Oof::from_blob(blob[..].as_ptr() as *mut u8, 2) };
+        let oof = unsafe { Oof::from_raw(blob[..].as_ptr() as *mut u8) };
 
         assert_eq!(oof.get(&1), Some(&build_value(1)));
         assert_eq!(oof.get(&2), Some(&build_value(2)));

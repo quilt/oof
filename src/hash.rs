@@ -10,13 +10,3 @@ pub fn hash(left: &V, right: &V) -> V {
     buf[0..32].copy_from_slice(tmp.as_ref());
     *array_ref![buf, 0, 32]
 }
-
-#[cfg(feature = "generate")]
-pub fn zero_hash(default: &V, depth: u128) -> V {
-    if depth == 0 {
-        *default
-    } else {
-        let h = zero_hash(default, depth - 1);
-        hash(array_ref![h, 0, 32], array_ref![h, 0, 32])
-    }
-}

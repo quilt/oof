@@ -1,6 +1,6 @@
 [package]
 name = "oof"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Matt Garnett <crates@garnett.dev>"]
 license = "Apache-2.0"
 description = "Naive proof scheme for accelerated testing"
@@ -10,7 +10,7 @@ edition = "2018"
 
 [dependencies]
 arrayref = "0.3.5"
-bonsai = { path = "../bonsai", default-features = false, features=["u128"] }
+bonsai = { version = "0.2.1", default-features = false, features=["u128"] }
 sha2 = "0.8.0"
 
 [features]

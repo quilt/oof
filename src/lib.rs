@@ -77,10 +77,12 @@ impl Oof {
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.map.get(&key)
+        self.map.get(key)
     }
 
     pub fn set(&mut self, key: K, value: V) -> Option<V> {
+        let (_, _, parent) = expand(key);
+        self.map.remove(&parent);
         self.map.insert(key, value)
     }
 
@@ -104,7 +106,6 @@ impl Oof {
             let (left, right, parent) = expand(key);
 
             println!("l: {} r: {} p: {}", left, right, parent);
-
             match (self.get(&left), self.get(&right), self.get(&parent)) {
                 (Some(l), Some(r), None) => {
                     let h = hash(l, r);

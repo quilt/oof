@@ -1,4 +1,4 @@
-// #![no_std]
+#![no_std]
 
 pub mod hash;
 
@@ -105,7 +105,6 @@ impl Oof {
 
             let (left, right, parent) = expand(key);
 
-            println!("l: {} r: {} p: {}", left, right, parent);
             match (self.get(&left), self.get(&right), self.get(&parent)) {
                 (Some(l), Some(r), None) => {
                     let h = hash(l, r);
